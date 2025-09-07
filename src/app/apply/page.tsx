@@ -105,6 +105,9 @@ export default function ApplyPage() {
       if (formData.cibil_id.length > 0 && formData.cibil_id.length !== 9) {
         return 'CIBIL ID should be exactly 9 digits'
       }
+      if (formData.cibil_id.length === 9 && !/^\d{9}$/.test(formData.cibil_id)) {
+        return 'CIBIL ID should contain only digits'
+      }
     }
     return null
   }
@@ -136,20 +139,48 @@ export default function ApplyPage() {
     }
   }
 
+  const validateCibilIdExists = async (cibilId: string): Promise<boolean> => {
+    if (cibilId.length !== 9) {
+      return false
+    }
+    
+    try {
+      // Use the dedicated validation endpoint
+      const response = await fetch(`https://cogni-ml.onrender.com/validate-cibil/${cibilId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      
+      // If we get a 200, the CIBIL ID exists
+      return response.status === 200
+    } catch (error) {
+      // If there's an error, assume it doesn't exist
+      return false
+    }
+  }
+
   const handleSubmit = async () => {
     setIsLoading(true)
     setError(null)
     
     try {
+      // CIBIL ID validation: exactly 9 digits
+      if (formData.cibil_id.length !== 9) {
+        throw new Error('CIBIL ID should be exactly 9 digits')
+      }
+
+      // Check if CIBIL ID exists in database first
+      const cibilExists = await validateCibilIdExists(formData.cibil_id)
+      if (!cibilExists) {
+        throw new Error(`CIBIL ID '${formData.cibil_id}' not found in our database. Please verify your CIBIL ID and try again.`)
+      }
+
       // Age validation: 18-70 years
       const age = parseInt(formData.age)
       if (!formData.age || isNaN(age) || age < 18 || age > 70) {
         throw new Error('Age should be between 18 and 70')
-      }
-
-      // CIBIL ID validation: exactly 9 digits
-      if (formData.cibil_id.length !== 9) {
-        throw new Error('CIBIL ID should be exactly 9 digits')
       }
 
       // Work experience validation: 0-40 years
@@ -199,15 +230,28 @@ export default function ApplyPage() {
       })
 
       if (!response.ok) {
-        let errorMessage = 'Invalid CIBIL ID'
+        let errorMessage = 'An error occurred while processing your application'
         try {
           const errorData = await response.json()
           if (errorData && typeof errorData === 'object') {
-            errorMessage = errorData.detail || errorData.message || errorMessage
+            // Handle specific error cases
+            if (response.status === 404) {
+              errorMessage = `CIBIL ID '${formData.cibil_id}' not found in our database. Please verify your CIBIL ID and try again.`
+            } else if (response.status === 400) {
+              errorMessage = errorData.detail || errorData.message || 'Please check your input data and try again'
+            } else if (response.status === 500) {
+              errorMessage = 'Server error occurred. Please try again later.'
+            } else {
+              errorMessage = errorData.detail || errorData.message || errorMessage
+            }
           }
         } catch (parseError) {
           // If JSON parsing fails, use the response status text
-          errorMessage = response.statusText || errorMessage
+          if (response.status === 404) {
+            errorMessage = `CIBIL ID '${formData.cibil_id}' not found in our database. Please verify your CIBIL ID and try again.`
+          } else {
+            errorMessage = response.statusText || errorMessage
+          }
         }
         throw new Error(errorMessage)
       }
@@ -215,7 +259,7 @@ export default function ApplyPage() {
       const data: LoanResponse = await response.json()
       setResult(data)
     } catch (err) {
-      let errorMessage = 'An error occurred'
+      let errorMessage = 'An error occurred while processing your application'
       if (err instanceof Error) {
         errorMessage = err.message
       } else if (typeof err === 'string') {
