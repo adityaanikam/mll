@@ -150,7 +150,7 @@ export default function ApplyPage() {
       })
 
       if (!response.ok) {
-        let errorMessage = 'Failed to process loan application'
+        let errorMessage = 'Invalid Cibil ID'
         try {
           const errorData = await response.json()
           if (errorData && typeof errorData === 'object') {
