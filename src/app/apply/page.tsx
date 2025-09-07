@@ -713,7 +713,7 @@ export default function ApplyPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="High School">High School</SelectItem>
-                          <SelectItem value="12th Pass">12th Pass</SelectItem>
+                          <SelectItem value="Jr. College">Jr. College</SelectItem>
                           <SelectItem value="Diploma">Diploma</SelectItem>
                           <SelectItem value="Bachelor">Bachelor&apos;s Degree</SelectItem>
                           <SelectItem value="Master">Master&apos;s Degree</SelectItem>
