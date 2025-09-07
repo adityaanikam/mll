@@ -76,6 +76,38 @@ export default function ApplyPage() {
   const [error, setError] = useState<string | null>(null)
   const [showContactModal, setShowContactModal] = useState(false)
   const router = useRouter();
+
+  // Helper function to check if a field has validation errors
+  const getFieldError = (field: keyof LoanFormData): string | null => {
+    if (field === 'age' && formData.age) {
+      const age = parseInt(formData.age)
+      if (age < 18 || age > 70) {
+        return 'Age should be between 18 and 70'
+      }
+    }
+    if (field === 'experience' && formData.experience) {
+      const experience = parseInt(formData.experience)
+      if (experience > 40) {
+        return 'Work experience cannot exceed 40 years'
+      }
+      if (formData.employment === 'Retired' && experience === 0) {
+        return 'Retired employees must have work experience greater than 0'
+      }
+    }
+    if (field === 'salary' && formData.salary) {
+      const salary = parseFloat(formData.salary)
+      const employmentTypesRequiringSalary = ['Salaried', 'Self-Employed', 'Retired']
+      if (employmentTypesRequiringSalary.includes(formData.employment) && salary < 15000) {
+        return 'Minimum salary should be 15,000'
+      }
+    }
+    if (field === 'cibil_id' && formData.cibil_id) {
+      if (formData.cibil_id.length > 0 && formData.cibil_id.length !== 9) {
+        return 'CIBIL ID should be exactly 9 digits'
+      }
+    }
+    return null
+  }
   const [formData, setFormData] = useState<LoanFormData>({
     age: '',
     gender: '',
@@ -88,27 +120,13 @@ export default function ApplyPage() {
   })
 
   const handleInputChange = (field: keyof LoanFormData, value: string) => {
-    // Validation for numeric fields
-    if (field === 'age') {
-      // Age: 18-70 years only
+    // Allow typing freely, validate on blur/submit
+    if (field === 'age' || field === 'experience' || field === 'salary') {
+      // Only allow numeric input, but don't restrict the values during typing
       const numericValue = value.replace(/[^0-9]/g, '')
-      if (numericValue === '' || (parseInt(numericValue) >= 18 && parseInt(numericValue) <= 70)) {
-        setFormData(prev => ({ ...prev, [field]: numericValue }))
-      }
-    } else if (field === 'experience') {
-      // Experience: 0-40 years
-      const numericValue = value.replace(/[^0-9]/g, '')
-      if (numericValue === '' || parseInt(numericValue) <= 40) {
-        setFormData(prev => ({ ...prev, [field]: numericValue }))
-      }
-    } else if (field === 'salary') {
-      // Salary: positive numbers only
-      const numericValue = value.replace(/[^0-9]/g, '')
-      if (numericValue === '' || parseInt(numericValue) > 0) {
-        setFormData(prev => ({ ...prev, [field]: numericValue }))
-      }
+      setFormData(prev => ({ ...prev, [field]: numericValue }))
     } else if (field === 'cibil_id') {
-      // CIBIL ID: exactly 9 digits
+      // CIBIL ID: only digits, max 9 characters
       const numericValue = value.replace(/[^0-9]/g, '')
       if (numericValue.length <= 9) {
         setFormData(prev => ({ ...prev, [field]: numericValue }))
@@ -125,7 +143,7 @@ export default function ApplyPage() {
     try {
       // Age validation: 18-70 years
       const age = parseInt(formData.age)
-      if (!formData.age || age < 18 || age > 70) {
+      if (!formData.age || isNaN(age) || age < 18 || age > 70) {
         throw new Error('Age should be between 18 and 70')
       }
 
@@ -136,7 +154,7 @@ export default function ApplyPage() {
 
       // Work experience validation: 0-40 years
       const experience = parseInt(formData.experience)
-      if (formData.experience === '' || experience < 0 || experience > 40) {
+      if (formData.experience === '' || isNaN(experience) || experience < 0 || experience > 40) {
         throw new Error('Work experience cannot exceed 40 years')
       }
 
@@ -146,11 +164,14 @@ export default function ApplyPage() {
       }
 
       // Salary validation: minimum 15,000 for specific employment types
-      const salary = parseFloat(formData.salary)
       const employmentTypesRequiringSalary = ['Salaried', 'Self-Employed', 'Retired']
       
       if (employmentTypesRequiringSalary.includes(formData.employment)) {
-        if (!formData.salary || salary < 15000) {
+        if (!formData.salary) {
+          throw new Error('Salary is required for this employment type')
+        }
+        const salary = parseFloat(formData.salary)
+        if (isNaN(salary) || salary < 15000) {
           throw new Error('Minimum salary should be 15,000')
         }
       }
@@ -210,16 +231,21 @@ export default function ApplyPage() {
 
   const validateCurrentStep = () => {
     if (currentStep === 1) {
+      // Basic field presence check
+      if (!formData.age || !formData.gender || !formData.marital_status || !formData.education) {
+        return false
+      }
+      
+      // Age validation
       const age = parseInt(formData.age)
-      return formData.age && formData.gender && formData.marital_status && formData.education &&
-             age >= 18 && age <= 70
+      if (isNaN(age) || age < 18 || age > 70) {
+        return false
+      }
+      
+      return true
     }
     if (currentStep === 2) {
-      const experience = parseInt(formData.experience)
-      const salary = parseFloat(formData.salary)
-      const employmentTypesRequiringSalary = ['Salaried', 'Self-Employed', 'Retired']
-      
-      // Basic field validation
+      // Basic field presence check
       if (!formData.employment || !formData.experience || !formData.cibil_id) {
         return false
       }
@@ -230,7 +256,8 @@ export default function ApplyPage() {
       }
       
       // Experience validation
-      if (experience < 0 || experience > 40) {
+      const experience = parseInt(formData.experience)
+      if (isNaN(experience) || experience < 0 || experience > 40) {
         return false
       }
       
@@ -240,8 +267,13 @@ export default function ApplyPage() {
       }
       
       // Salary validation for specific employment types
+      const employmentTypesRequiringSalary = ['Salaried', 'Self-Employed', 'Retired']
       if (employmentTypesRequiringSalary.includes(formData.employment)) {
-        if (!formData.salary || salary < 15000) {
+        if (!formData.salary) {
+          return false
+        }
+        const salary = parseFloat(formData.salary)
+        if (isNaN(salary) || salary < 15000) {
           return false
         }
       }
@@ -601,8 +633,8 @@ export default function ApplyPage() {
                         onChange={(e) => handleInputChange('age', e.target.value)}
                         className="border-blue-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
                       />
-                      {formData.age && (parseInt(formData.age) < 18 || parseInt(formData.age) > 70) && (
-                        <p className="text-xs text-red-500">Age should be between 18 and 70</p>
+                      {getFieldError('age') && (
+                        <p className="text-xs text-red-500">{getFieldError('age')}</p>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -674,15 +706,8 @@ export default function ApplyPage() {
                         onChange={(e) => handleInputChange('experience', e.target.value)}
                         className="border-blue-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
                       />
-                      {formData.experience && (
-                        <>
-                          {parseInt(formData.experience) > 40 && (
-                            <p className="text-xs text-red-500">Work experience cannot exceed 40 years</p>
-                          )}
-                          {formData.employment === 'Retired' && parseInt(formData.experience) === 0 && (
-                            <p className="text-xs text-red-500">Retired employees must have work experience greater than 0</p>
-                          )}
-                        </>
+                      {getFieldError('experience') && (
+                        <p className="text-xs text-red-500">{getFieldError('experience')}</p>
                       )}
                     </div>
                     <div className="space-y-2 md:col-span-2">
@@ -695,15 +720,9 @@ export default function ApplyPage() {
                         onChange={(e) => handleInputChange('salary', e.target.value)}
                         className="border-blue-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
                       />
-                      {formData.salary && (() => {
-                        const salary = parseFloat(formData.salary)
-                        const employmentTypesRequiringSalary = ['Salaried', 'Self-Employed', 'Retired']
-                        
-                        if (employmentTypesRequiringSalary.includes(formData.employment) && salary < 15000) {
-                          return <p className="text-xs text-red-500">Minimum salary should be 15,000</p>
-                        }
-                        return null
-                      })()}
+                      {getFieldError('salary') && (
+                        <p className="text-xs text-red-500">{getFieldError('salary')}</p>
+                      )}
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="cibil_id" className="text-slate-700 font-medium">CIBIL ID</Label>
@@ -717,8 +736,8 @@ export default function ApplyPage() {
                       />
                       <p className="text-xs text-slate-500">
                         {formData.cibil_id.length}/9 digits
-                        {formData.cibil_id.length > 0 && formData.cibil_id.length !== 9 && (
-                          <span className="text-red-500 ml-2">CIBIL ID should be exactly 9 digits</span>
+                        {getFieldError('cibil_id') && (
+                          <span className="text-red-500 ml-2">{getFieldError('cibil_id')}</span>
                         )}
                       </p>
                     </div>
