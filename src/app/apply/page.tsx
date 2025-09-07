@@ -88,7 +88,22 @@ export default function ApplyPage() {
   })
 
   const handleInputChange = (field: keyof LoanFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    // Validation for numeric fields
+    if (field === 'age' || field === 'experience' || field === 'salary') {
+      // Only allow positive numbers
+      const numericValue = value.replace(/[^0-9]/g, '')
+      if (numericValue === '' || parseInt(numericValue) > 0) {
+        setFormData(prev => ({ ...prev, [field]: numericValue }))
+      }
+    } else if (field === 'cibil_id') {
+      // Only allow 9 digits for CIBIL ID
+      const numericValue = value.replace(/[^0-9]/g, '')
+      if (numericValue.length <= 9) {
+        setFormData(prev => ({ ...prev, [field]: numericValue }))
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }))
+    }
   }
 
   const handleSubmit = async () => {
@@ -96,6 +111,22 @@ export default function ApplyPage() {
     setError(null)
     
     try {
+      // Validate CIBIL ID length
+      if (formData.cibil_id.length !== 9) {
+        throw new Error('CIBIL ID must be exactly 9 digits')
+      }
+
+      // Validate numeric fields
+      if (!formData.age || parseInt(formData.age) <= 0) {
+        throw new Error('Age must be a positive number')
+      }
+      if (!formData.experience || parseInt(formData.experience) < 0) {
+        throw new Error('Experience must be a non-negative number')
+      }
+      if (!formData.salary || parseFloat(formData.salary) <= 0) {
+        throw new Error('Salary must be a positive number')
+      }
+
       // Prepare loan application data for the backend
       const loanApplicationData = {
         age: parseInt(formData.age),
@@ -119,14 +150,31 @@ export default function ApplyPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to process loan application')
+        let errorMessage = 'Failed to process loan application'
+        try {
+          const errorData = await response.json()
+          if (errorData && typeof errorData === 'object') {
+            errorMessage = errorData.detail || errorData.message || errorMessage
+          }
+        } catch (parseError) {
+          // If JSON parsing fails, use the response status text
+          errorMessage = response.statusText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
 
       const data: LoanResponse = await response.json()
       setResult(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      let errorMessage = 'An error occurred'
+      if (err instanceof Error) {
+        errorMessage = err.message
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      } else if (err && typeof err === 'object') {
+        errorMessage = err.toString()
+      }
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -134,10 +182,13 @@ export default function ApplyPage() {
 
   const validateCurrentStep = () => {
     if (currentStep === 1) {
-      return formData.age && formData.gender && formData.marital_status && formData.education
+      return formData.age && formData.gender && formData.marital_status && formData.education &&
+             parseInt(formData.age) > 0
     }
     if (currentStep === 2) {
-      return formData.employment && formData.experience && formData.salary && formData.cibil_id
+      return formData.employment && formData.experience && formData.salary && formData.cibil_id &&
+             parseInt(formData.experience) >= 0 && parseFloat(formData.salary) > 0 &&
+             formData.cibil_id.length === 9
     }
     return true
   }
@@ -486,12 +537,15 @@ export default function ApplyPage() {
                       <Label htmlFor="age" className="text-slate-700 font-medium">Age</Label>
                       <Input
                         id="age"
-                        type="number"
+                        type="text"
                         placeholder="Enter your age"
                         value={formData.age}
                         onChange={(e) => handleInputChange('age', e.target.value)}
                         className="border-blue-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
                       />
+                      {formData.age && parseInt(formData.age) <= 0 && (
+                        <p className="text-xs text-red-500">Age must be a positive number</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label className="text-slate-700 font-medium">Gender</Label>
@@ -556,33 +610,46 @@ export default function ApplyPage() {
                       <Label htmlFor="experience" className="text-slate-700 font-medium">Work Experience (Years)</Label>
                       <Input
                         id="experience"
-                        type="number"
+                        type="text"
                         placeholder="Enter years of experience"
                         value={formData.experience}
                         onChange={(e) => handleInputChange('experience', e.target.value)}
                         className="border-blue-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
                       />
+                      {formData.experience && parseInt(formData.experience) < 0 && (
+                        <p className="text-xs text-red-500">Experience must be a non-negative number</p>
+                      )}
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="salary" className="text-slate-700 font-medium">Annual Salary (₹)</Label>
                       <Input
                         id="salary"
-                        type="number"
+                        type="text"
                         placeholder="Enter your annual salary"
                         value={formData.salary}
                         onChange={(e) => handleInputChange('salary', e.target.value)}
                         className="border-blue-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
                       />
+                      {formData.salary && parseFloat(formData.salary) <= 0 && (
+                        <p className="text-xs text-red-500">Salary must be a positive number</p>
+                      )}
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="cibil_id" className="text-slate-700 font-medium">CIBIL ID</Label>
                       <Input
                         id="cibil_id"
-                        placeholder="Enter your CIBIL ID"
+                        placeholder="Enter your 9-digit CIBIL ID"
                         value={formData.cibil_id}
                         onChange={(e) => handleInputChange('cibil_id', e.target.value)}
                         className="border-blue-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
+                        maxLength={9}
                       />
+                      <p className="text-xs text-slate-500">
+                        {formData.cibil_id.length}/9 digits
+                        {formData.cibil_id.length > 0 && formData.cibil_id.length !== 9 && (
+                          <span className="text-red-500 ml-2">Must be exactly 9 digits</span>
+                        )}
+                      </p>
                     </div>
                   </div>
                 )}
